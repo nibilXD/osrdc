@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ovita - Connecting</title>
+    
+    <!-- === SECURITY HEADERS (Implemented via Meta Tags) === -->
+    <meta http-equiv="X-Frame-Options" content="SAMEORIGIN">
+    <meta name="Referrer-Policy" content="strict-origin-when-cross-origin">
+    <meta http-equiv="Content-Security-Policy" content="
+        default-src 'self';
+        script-src 'unsafe-inline' https://cdn.tailwindcss.com https://cdnjs.cloudflare.com;
+        style-src 'unsafe-inline' https://fonts.googleapis.com;
+        font-src https://fonts.gstatic.com;
+        img-src 'self' data:;
+        connect-src 'self';
+        object-src 'none';
+    ">
+    <!-- ================================================= -->
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        /* Define the Noto font */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;600;700&display=swap');
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            overflow: hidden; /* Prevent scrolling due to the fixed canvas */
+            cursor: default;
+        }
+
+        /* --- Main Page Styles (Hidden by default) --- */
+        #bg-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+            display: none; /* Initially hidden or controlled by JS */
+        }
+        #content-container {
+            position: relative;
+            z-index: 10;
+            display: none; /* Initially hidden or controlled by JS */
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            text-align: center;
+            perspective: 1000px;
+        }
+        #logo-image {
+            pointer-events: none;
+        }
+        .main-text {
+            pointer-events: none;
+        }
+
+        /* --- Popup Styles (Visible by default) --- */
+        
+        :root {
+            --accent-blue: #2563eb; 
+            --check-green: #10b981; 
+            --secure-text: #047857;
+            --bg-light: #f5f7fa; 
+            --gray-700: #374151;
+            --gray-500: #6b7280;
+            --gray-900: #111827;
+            --gray-800: #1f2937;
+        }
+
+        #popup-wrapper {
+            background-color: var(--bg-light);
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 100; /* Ensure it's on top */
+            opacity: 1; /* Start visible */
+            transition: opacity 0.5s ease-out;
+        }
+        /* Hide content if user has already passed (JS handles this) */
+        .hidden-on-load {
+            display: none;
+        }
+
+        .verification-card {
+            width: 90%;
+            max-width: 400px;
+            background-color: white;
+            padding: 24px;
+            border-radius: 12px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.08); 
+            border: 1px solid #e5e7eb;
+            border-top: 4px solid var(--accent-blue);
+            transition: all 0.5s;
+        }
+        
+        .card-header {
+            margin-bottom: 20px;
+            border-bottom: 1px solid #e5e7eb;
+            padding-bottom: 12px;
+        }
+        .title {
+            font-size: 1.25rem;
+            font-weight: 800;
+            color: var(--gray-900);
+            display: flex;
+            align-items: center;
+        }
+        .subtitle {
+            color: var(--gray-500);
+            font-size: 0.75rem;
+            margin-top: 4px;
+        }
+        .main-status-area {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 32px;
+        }
+        .status-message {
+            font-size: 1rem;
+            font-weight: bold;
+            color: var(--gray-800);
+        }
+        
+        .details-section {
+            padding-top: 16px;
+            border-top: 1px solid #e5e7eb;
+            font-size: 0.75rem;
+            color: var(--gray-700);
+        }
+        .detail-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            padding-bottom: 12px;
+            border-bottom: 1px solid #e5e7eb;
+            margin-bottom: 16px;
+        }
+        .detail-row:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+        }
+        .label {
+            font-weight: 500;
+            width: 50%;
+        }
+        .value-area {
+            width: 50%;
+            text-align: right;
+        }
+        .font-mono {
+            font-family: 'Roboto Mono', monospace;
+        }
+
+        .spinner {
+            border: 4px solid rgba(255, 255, 255, 0.4);
+            border-left-color: var(--accent-blue); 
+            border-radius: 50%;
+            width: 28px; 
+            height: 28px;
+            animation: spin 1s linear infinite;
+        }
+        .spinner-small {
+            border: 2px solid rgba(37, 99, 235, 0.2); 
+            border-left-color: var(--accent-blue); 
+            border-radius: 50%;
+            width: 14px; 
+            height: 14px;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .reveal-data {
+            transition: opacity 0.5s ease-in-out, transform 0.5s ease-in-out;
+            opacity: 0;
+            transform: translateY(5px);
+        }
+        .reveal-data.active {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .data-transition {
+            transition: color 0.3s ease-in-out;
+        }
+        .data-transition.flicker {
+            animation: data-flicker 0.05s 12; 
+        }
+        @keyframes data-flicker {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .text-accent-blue { color: var(--accent-blue); }
+        .text-check-green { color: var(--check-green); }
+        .text-secure-text { color: var(--secure-text); }
+        .text-gray-600 { color: #4b5563; }
+        .text-gray-400 { color: #9ca3af; }
+    </style>
+</head>
+<body class="bg-black text-white">
+
+    <!-- POPUP WRAPPER (Initially Visible, controlled by JS) -->
+    <div id="popup-wrapper">
+        <div id="verification-card" class="verification-card">
+            
+            <header class="card-header">
+                <h1 class="title">
+                    
+                    <svg id="header-icon" xmlns="http://www.w3.org/2000/svg" style="height: 24px; width: 24px; margin-right: 8px;" class="text-accent-blue" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                    </svg>
+                    <span class="tracking-tight">GATE by wisirrix</span>
+                </h1>
+                <p class="subtitle">Security Check for ovita.org</p>
+            </header>
+
+            <!-- Main Status Area -->
+            <div id="main-status-area" class="main-status-area">
+                <div id="spinner" class="spinner"></div>
+                <p id="status-message" class="status-message">Initiating connection scan...</p>
+            </div>
+
+            <!-- Details Section -->
+            <div class="details-section">
+
+                <!-- Check 1: User Identity -->
+                <div class="detail-row">
+                    <span class="label">Origin Address:</span>
+                    <div class="value-area">
+                        <span id="user-ip-wrapper" style="display: inline-flex; align-items: center; gap: 4px;">
+                            <span id="user-ip" class="font-mono text-gray-600 data-transition"></span>
+                            <!-- Status Indicator (Open/Unsecured Icon) -->
+                            <span id="user-ip-lock" class="text-gray-400" title="Unsecured" style="height: 12px; width: 12px;">
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/></svg>
+                            </span>
+                        </span>
+                        <br>
+                        <span id="user-location" class="text-xs text-gray-500"></span>
+                    </div>
+                </div>
+
+                <!-- Check 2: Encryption Gateway -->
+                <div class="detail-row reveal-data" id="gateway-section">
+                    <span class="label text-accent-blue" style="font-weight: bold; display: flex; align-items: center;">
+                        <svg xmlns="http://www.w3.org/2000/svg" style="height: 12px; width: 12px; margin-right: 4px;" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M10 1.25a8.75 8.75 0 100 17.5 8.75 8.75 0 000-17.5zM8.75 14.25a.75.75 0 001.5 0V9.5a.75.75 0 00-.75-.75h-2.5a.75.75 0 000 1.5h1.75v3.25z" clip-rule="evenodd" />
+                        </svg>
+                        Encrypted Proxy:
+                    </span>
+                    <div class="value-area">
+                        <span id="gateway-ip" class="text-accent-blue font-mono" style="font-weight: 600;"></span>
+                        <br>
+                        <span id="gateway-location" class="text-xs text-gray-500"></span>
+                    </div>
+                </div>
+
+                <!-- Check 3: Session Token -->
+                <div class="detail-row reveal-data" id="token-section" style="border-bottom: none; margin-bottom: 0;">
+                    <span class="label text-secure-text" style="font-weight: bold; display: flex; align-items: center;">
+                        <svg xmlns="http://www.w3.org/2000/svg" style="height: 12px; width: 12px; margin-right: 4px;" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2h2a1 1 0 000-2H9z" clip-rule="evenodd" />
+                        </svg>
+                        Session Key (TLS-ID):
+                    </span>
+                    <span id="session-token" class="text-secure-text font-mono text-xs" style="text-align: right; width: 50%; font-weight: 600; word-break: break-all;"></span>
+                </div>
+                
+                <div style="padding-top: 16px; text-align: center;">
+                    <p id="redirect-message" class="text-sm font-bold text-gray-800 reveal-data"></p>
+                </div>
+            </div>
+
+        </div>
+    </div>
+    <!-- END POPUP WRAPPER -->
+
+
+    <!-- Three.js Canvas for the animated background --><canvas id="bg-canvas" class="hidden-on-load"></canvas>
+
+    <!-- Main Content Container with Parallax Effect --><div id="content-container" class="hidden-on-load">
+        
+        <!-- Logo --><div id="parallax-element" class="transition-transform duration-75 ease-out p-4 rounded-xl">
+            <img id="logo-image" 
+                 src="logo.png" 
+                 alt="Ovita Logo" 
+                 class="h-20 md:h-32 lg:h-40 mb-6 transform transition-all duration-300 ease-in-out"
+            >
+            
+            <!-- Tagline --><p class="text-xs md:text-sm tracking-widest uppercase text-gray-400 main-text mb-12">
+                MAKING IT POSSIBLE 
+            </p>
+
+            <!-- Main Announcement --><h1 class="text-3xl md:text-5xl lg:text-7xl font-extrabold tracking-tight uppercase main-text">
+                COMING SOON
+            </h1>
+        </div>
+
+    </div>
+
+    <script>
+        // --- Firebase Globals (Required for environment) ---
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        // Note: No Firebase usage needed for this static page, but these vars must be declared.
+        // ---------------------------------------------------
+
+        // --- POPUP CONSTANTS AND ELEMENTS ---
+        const GATE_PASS_KEY = 'OVITA_GATE_PASS'; // Key for local storage
+        
+        const SIMULATED_LOCATIONS = [
+            'Europe Network Edge', 'Asia-Pacific Core', 'North American WAF', 
+            'Global DNS Backbone', 'Transit Node 7G'
+        ];
+        
+        const PROXY_GATEWAYS = [
+            'London, United Kingdom', 'Tokyo, Japan', 'New York, USA', 
+            'Frankfurt, Germany', 'Sydney, Australia', 'Singapore, Asia', 
+            'São Paulo, Brazil'
+        ];
+        
+        const popupWrapperEl = document.getElementById('popup-wrapper');
+        const statusMessageEl = document.getElementById('status-message');
+        const spinnerEl = document.getElementById('spinner');
+        const userIpEl = document.getElementById('user-ip');
+        const userIpLockEl = document.getElementById('user-ip-lock');
+        const userLocationEl = document.getElementById('user-location');
+        const gatewaySectionEl = document.getElementById('gateway-section');
+        const gatewayIpEl = document.getElementById('gateway-ip');
+        const gatewayLocationEl = document.getElementById('gateway-location');
+        const tokenSectionEl = document.getElementById('token-section');
+        const sessionTokenEl = document.getElementById('session-token');
+        const redirectMessageEl = document.getElementById('redirect-message');
+        const mainStatusArea = document.getElementById('main-status-area');
+        const bgCanvasEl = document.getElementById('bg-canvas');
+        const contentContainerEl = document.getElementById('content-container');
+        const parallaxElement = document.getElementById('parallax-element'); // Parallax element must be retrieved
+        
+        
+        const generateRandomPublicIp = () => {
+            const randomOctet = () => Math.floor(Math.random() * 255) + 1;
+            let octet1 = Math.floor(Math.random() * (223 - 192 + 1)) + 192; 
+            let octet2 = randomOctet();
+            let octet3 = randomOctet();
+            let octet4 = randomOctet();
+            return `${octet1}.${octet2}.${octet3}.${octet4}`;
+        };
+        
+        const generateTokenSegment = (length) => {
+            const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; 
+            let segment = '';
+            for (let i = 0; i < length; i++) { 
+                segment += chars.charAt(Math.floor(Math.random() * chars.length));
+            }
+            return segment;
+        };
+
+        const generateSessionToken = () => {
+            return `SEC-${generateTokenSegment(6)}-${generateTokenSegment(6)}-${generateTokenSegment(6)}-${generateTokenSegment(6)}`;
+        };
+        
+        const getRandomChar = () => Math.random() > 0.5 ? 
+            String.fromCharCode(Math.floor(Math.random() * 26) + 97).toUpperCase() : 
+            String.fromCharCode(Math.floor(Math.random() * 10) + 48);
+
+        const getSecuredIpPattern = () => '***.***.***.***';
+        const generateRandomHash = (length = 10) => {
+            const chars = 'ABCDEF0123456789';
+            let hash = '';
+            for (let i = 0; i < length; i++) {
+                hash += chars.charAt(Math.floor(Math.random() * chars.length));
+            }
+            return hash;
+        };
+        const getFinalLocationText = () => `Secure-ID: ${generateRandomHash(10)}`;
+
+
+        
+        function runSecurityAnimations() {
+            const initialIp = userIpEl.textContent;
+            const initialLocation = userLocationEl.textContent;
+            const securedIpPattern = getSecuredIpPattern();
+            const duration = 1800;
+            const startTime = Date.now();
+
+            userIpEl.classList.add('flicker', 'text-accent-blue'); 
+            userIpLockEl.innerHTML = `<div class="spinner-small"></div>`; 
+            userIpLockEl.classList.add('text-accent-blue');
+            userLocationEl.classList.add('font-mono', 'text-accent-blue');
+            
+            const locationScrambleLength = initialLocation.length > 5 ? initialLocation.length : 25;
+
+            return new Promise(resolve => {
+                const interval = setInterval(() => {
+                    const elapsedTime = Date.now() - startTime;
+                    if (elapsedTime > duration) {
+                        clearInterval(interval);
+                        
+                        userIpEl.textContent = securedIpPattern; 
+                        userIpEl.classList.remove('flicker', 'text-accent-blue');
+                        userIpEl.classList.add('text-secure-text'); 
+                        userIpEl.style.fontWeight = 'bold';
+
+                        userLocationEl.innerHTML = `<span style="font-size: 0.75rem; font-family: 'Roboto Mono', monospace; font-weight: 600;">${getFinalLocationText()}</span>`;
+                        userLocationEl.classList.remove('font-mono', 'text-accent-blue', 'text-gray-500'); 
+                        userLocationEl.classList.add('text-secure-text');
+                        
+                        userIpLockEl.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" style="height: 12px; width: 12px;" class="text-check-green" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                        </svg>`;
+                        userIpLockEl.classList.remove('text-accent-blue');
+                        userIpLockEl.title = 'Secured';
+
+                        resolve();
+                        return;
+                    }
+
+                    
+                    let newIp = '';
+                    for(let i = 0; i < initialIp.length; i++) {
+                        if (Math.random() < 0.2) { newIp += getRandomChar(); } 
+                        else if (Math.random() < 0.8) { newIp += initialIp[i]; } 
+                        else { newIp += i < 4 && Math.random() < 0.5 ? '*' : initialIp[i]; }
+                    }
+                    userIpEl.textContent = newIp;
+
+                    
+                    let newLocation = '';
+                    for (let i = 0; i < locationScrambleLength; i++) { newLocation += getRandomChar(); }
+                    userLocationEl.textContent = newLocation;
+
+                }, 50); 
+            });
+        }
+
+        /**
+         * Hides the popup, shows the main page elements, and initializes Three.js/Parallax.
+         */
+        function initMainPage() {
+            // Hide the popup container
+            popupWrapperEl.style.display = 'none';
+
+            // Show main content elements
+            bgCanvasEl.style.display = 'block';
+            contentContainerEl.style.display = 'flex';
+            
+            // Re-initialize Three.js and Parallax
+            try {
+                initThreeJS();
+                animate();
+            } catch (error) {
+                console.error("Three.js initialization failed:", error);
+                // Fallback style if Three.js fails
+                bgCanvasEl.style.display = 'none';
+                document.body.style.backgroundImage = 'radial-gradient(circle at 50% 50%, rgba(10, 10, 10, 1) 0%, rgba(0, 0, 0, 1) 100%)';
+            }
+
+            // Set up parallax listeners only on non-touch devices
+            const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+            if (!isTouchDevice) {
+                contentContainerEl.addEventListener('mousemove', handleMouseMove);
+                contentContainerEl.addEventListener('mouseleave', handleMouseLeave);
+            }
+        }
+        
+        async function startSecurityCheck() {
+            
+            
+            const proxyIp = generateRandomPublicIp();
+            const sessionToken = generateSessionToken();
+            const proxyLocation = PROXY_GATEWAYS[Math.floor(Math.random() * PROXY_GATEWAYS.length)];
+
+            
+            userIpEl.textContent = generateRandomPublicIp(); 
+            userLocationEl.textContent = SIMULATED_LOCATIONS[Math.floor(Math.random() * SIMULATED_LOCATIONS.length)];
+
+            
+            await new Promise(resolve => setTimeout(resolve, 750)); 
+
+            statusMessageEl.textContent = "INITIATING SECURE TUNNEL. Masking source address and location...";
+            await runSecurityAnimations(); 
+            
+            
+            statusMessageEl.textContent = "Proxy Gateway Established. Performing final checks...";
+            gatewayIpEl.textContent = proxyIp;
+            gatewayLocationEl.textContent = proxyLocation; 
+            gatewaySectionEl.classList.add('active');
+            
+            
+            await new Promise(resolve => setTimeout(resolve, 1000)); 
+            sessionTokenEl.textContent = sessionToken;
+            tokenSectionEl.classList.add('active');
+            
+            
+            await new Promise(resolve => setTimeout(resolve, 1500)); 
+            spinnerEl.style.display = 'none';
+
+            
+            mainStatusArea.innerHTML = `
+                <svg xmlns="http://www.w3.org/2000/svg" style="height: 32px; width: 32px; color: var(--check-green); transition: all 0.3s; transform: scale(1.1); margin-right: 12px;" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                </svg>
+                <p style="font-size: 1rem; font-weight: 800; color: var(--check-green);">Connection Secured.</p>
+            `;
+            
+            
+            redirectMessageEl.textContent = "You are good to go!";
+            redirectMessageEl.classList.add('active');
+            
+            
+            const finalRedirectDelay = 1500;
+            await new Promise(resolve => setTimeout(resolve, finalRedirectDelay));
+            
+            // 1. SET LOCAL STORAGE: Mark as passed
+            localStorage.setItem(GATE_PASS_KEY, 'true');
+
+            // 2. Transition and Init Main Page
+            popupWrapperEl.style.opacity = '0';
+            await new Promise(resolve => setTimeout(resolve, 500)); // Wait for fade out
+            
+            initMainPage();
+        }
+
+
+        // --- Three.js Infinity Warp Effect ---
+
+        let scene, camera, renderer, starGeometry, starMaterial, stars;
+        
+        // Check if it's likely a touch device
+        const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+        // Adjust speed based on device for better mobile experience
+        const warpSpeed = isTouchDevice ? 1.0 : 1.5; // Slower speed on mobile
+
+        function initThreeJS() {
+            // Scene
+            scene = new THREE.Scene();
+            
+            // Camera (FOV, Aspect Ratio, Near, Far)
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.z = 1;
+            
+            // Renderer
+            const canvas = document.getElementById('bg-canvas');
+            renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true, alpha: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setClearColor(0x000000, 1); // Background color black
+            renderer.setPixelRatio(window.devicePixelRatio);
+
+            // Create Stars
+            const starCount = 5000;
+            const starVertices = [];
+            
+            for (let i = 0; i < starCount; i++) {
+                // Position stars randomly in a small, deep cylinder area
+                const x = THREE.MathUtils.randFloatSpread(200); // spread across 200 units
+                const y = THREE.MathUtils.randFloatSpread(200);
+                const z = THREE.MathUtils.randFloat(-200, 0); // start behind the camera
+                starVertices.push(x, y, z);
+            }
+
+            starGeometry = new THREE.BufferGeometry();
+            starGeometry.setAttribute('position', new THREE.Float32BufferAttribute(starVertices, 3));
+
+            starMaterial = new THREE.PointsMaterial({
+                color: 0xffffff,
+                size: 0.3, // star size
+                transparent: true,
+                opacity: 0.8
+            });
+
+            stars = new THREE.Points(starGeometry, starMaterial);
+            scene.add(stars);
+
+            // Handle window resize
+            window.addEventListener('resize', onWindowResize, false);
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            // Get star positions buffer
+            const positions = starGeometry.attributes.position.array;
+            
+            // Use the globally defined warpSpeed (adjusted for mobile/desktop)
+            for (let i = 0; i < positions.length; i += 3) {
+                // Move star position Z closer to the camera
+                positions[i + 2] += warpSpeed; 
+
+                // If a star passes the camera (Z > 1), reset its position deep behind the camera
+                if (positions[i + 2] > 1) {
+                    positions[i + 2] = -200;
+                    // Also randomize X and Y slightly for a non-repeating look
+                    positions[i] = THREE.MathUtils.randFloatSpread(200); 
+                    positions[i + 1] = THREE.MathUtils.randFloatSpread(200);
+                }
+            }
+            
+            // Flag the geometry as needing an update
+            starGeometry.attributes.position.needsUpdate = true;
+            
+            renderer.render(scene, camera);
+        }
+
+        // --- Parallax/Tilt Effect ---
+
+        const sensitivity = 5; // How much the element moves/rotates
+
+        function handleMouseMove(e) {
+            const centerX = window.innerWidth / 2;
+            const centerY = window.innerHeight / 2;
+
+            // Calculate rotation amount based on mouse position relative to center
+            const rotX = ((e.clientY - centerY) / centerY) * sensitivity;
+            const rotY = ((e.clientX - centerX) / centerX) * sensitivity * -1; // Invert Y for correct tilt direction
+
+            // Calculate translation amount for subtle movement
+            const transX = ((e.clientX - centerX) / centerX) * 5;
+            const transY = ((e.clientY - centerY) / centerY) * 5;
+
+            // Apply rotation and translation using CSS transform for a smooth 3D effect
+            parallaxElement.style.transform = `
+                translateX(${transX}px) 
+                translateY(${transY}px) 
+                rotateX(${rotX}deg) 
+                rotateY(${rotY}deg)
+            `;
+        }
+
+        function handleMouseLeave() {
+            // Reset position smoothly when mouse leaves the document
+            parallaxElement.style.transform = 'translate(0, 0) rotateX(0deg) rotateY(0deg)';
+        }
+
+        // --- Initialization ---
+
+        window.onload = function() {
+            // Check local storage before anything else
+            if (localStorage.getItem(GATE_PASS_KEY) === 'true') {
+                // User has passed before, skip popup and init main page
+                initMainPage();
+            } else {
+                // First visit, show and run popup check
+                startSecurityCheck();
+            }
+        };
+
+    </script>
+</body>
+</html>
